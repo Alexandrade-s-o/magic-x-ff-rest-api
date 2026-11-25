@@ -604,7 +604,7 @@ export default function Home() {
                 >
                   <span className="collection-info">
                     <img
-                      src="/img/jace-reality-sculptor.jpg"
+                      src="/img/MTG.png"
                       className="franchise-thumb"
                       alt="Jace, Reality Sculptor"
                     />
@@ -714,7 +714,7 @@ export default function Home() {
                 </div>
               )}
             </main>
-            {hasMore && !loadingMore && (
+            {hasMore && cards.length > 0 && !loadingMore && (
               <div className="load-more-wrapper">
                 <button className="btn btn-outline" onClick={handleLoadMore} type="button">
                   Cargar más

@@ -7,6 +7,9 @@
     "frontend",
     "**/*spec.ts",
     "src/collections/angular-v18",
-    "frontend-angular18"
+    "frontend-angular18",
+    "prisma",
+    "scripts",
+    "api"
   ]
 }

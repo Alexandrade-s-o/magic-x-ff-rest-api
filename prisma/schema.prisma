@@ -4,7 +4,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Supabase: DATABASE_URL = pooler en modo transacción (puerto 6543, para la app)
+  //           DIRECT_URL   = conexión directa / pooler en modo sesión (puerto 5432, para migraciones)
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Rarity {

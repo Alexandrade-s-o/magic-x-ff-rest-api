@@ -7,11 +7,13 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "postinstall": "prisma generate",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "db:deploy": "prisma migrate deploy",
     "studio": "node -r dotenv/config ./node_modules/prisma/build/index.js studio --schema=prisma/schema.prisma",
     "import:cards": "ts-node --project tsconfig.json scripts/import-cards.ts",
     "import:hobbit": "ts-node --project tsconfig.json scripts/import-hobbit.ts",
@@ -91,5 +93,8 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
