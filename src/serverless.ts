@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createApp } from './app.setup';
+import { createApp } from './app.setup.js';
 
 type RequestHandler = (req: IncomingMessage, res: ServerResponse) => void;
 

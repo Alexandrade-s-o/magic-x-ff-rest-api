@@ -5,9 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreateCardDto } from './dto/create-card.dto';
-import { UpdateCardDto } from './dto/update-card.dto';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { CreateCardDto } from './dto/create-card.dto.js';
+import { UpdateCardDto } from './dto/update-card.dto.js';
 
 @Injectable()
 export class CardsService {

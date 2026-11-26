@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UserRole } from '@prisma/client';
-import { ROLES_KEY } from './roles.decorator';
+import { ROLES_KEY } from './roles.decorator.js';
 
 type RequestWithUser = {
   user?: { role?: UserRole };

@@ -2,8 +2,8 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { isUUID } from 'class-validator';
-import { UsersService } from '../users/users.service';
-import { jwtOptions } from './auth.config';
+import { UsersService } from '../users/users.service.js';
+import { jwtOptions } from './auth.config.js';
 
 type JwtPayload = {
   sub: string;

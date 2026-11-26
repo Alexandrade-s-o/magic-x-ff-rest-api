@@ -1,8 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, UserRole } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { hashPassword } from '../auth/password';
-import { CreateUserDto } from './dto/create-user.dto';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { hashPassword } from '../auth/password.js';
+import { CreateUserDto } from './dto/create-user.dto.js';
 
 type PublicUser = {
   id: string;

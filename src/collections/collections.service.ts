@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreateCollectionEntryDto } from './dto/create-collection-entry.dto';
-import { UpdateCollectionEntryDto } from './dto/update-collection-entry.dto';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { CreateCollectionEntryDto } from './dto/create-collection-entry.dto.js';
+import { UpdateCollectionEntryDto } from './dto/update-collection-entry.dto.js';
 
 const ENTRY_INCLUDE = {
   card: { include: { rarity: true, cardType: true } },

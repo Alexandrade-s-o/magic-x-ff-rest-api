@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { createApp } from './app.setup';
+import { createApp } from './app.setup.js';
 
 async function bootstrap() {
   const app = await createApp();

@@ -13,7 +13,10 @@ import type {
   SetInfo,
 } from '@/types/magic';
 import { AddCardModal } from '@/features/admin/AddCardModal';
-import { LoginModal } from '@/features/auth/LoginModal';
+import { LoginModal, type AuthMode } from '@/features/auth/LoginModal';
+import { AdvisorPanel } from '@/features/advisor/AdvisorPanel';
+import { SpeakButton } from '@/features/a11y/SpeakButton';
+import { useSpeech, type SpeechSegment } from '@/features/a11y/useSpeech';
 import { VirtualizedCardGrid } from '@/features/magic/VirtualizedCardGrid';
 
 // Skeleton loading components
@@ -38,6 +41,29 @@ const SkeletonGrid = ({ count = 12 }) => (
 
 const fallbackImage = '/img/MTG.png';
 
+/** Lo que lee «Escuchar carta»: rótulos en español y texto de la carta en inglés. */
+function cardSpeech(card: Card): SpeechSegment[] {
+  const segments: SpeechSegment[] = [
+    { lang: 'en', text: `${card.name}.` },
+    { lang: 'es', text: `Rareza ${card.rarity.name}. Tipo:` },
+    { lang: 'en', text: `${card.cardType.name}.` },
+  ];
+  if (card.manaCost)
+    segments.push({ lang: 'es', text: `Coste: ${card.manaCost}.` });
+  if (card.oracleText)
+    segments.push(
+      { lang: 'es', text: 'Texto:' },
+      { lang: 'en', text: card.oracleText },
+    );
+  if (card.power && card.toughness) {
+    segments.push({
+      lang: 'es',
+      text: `Fuerza ${card.power}, resistencia ${card.toughness}.`,
+    });
+  }
+  return segments;
+}
+
 const CARDS_PER_PAGE = 50;
 
 export default function Home() {
@@ -49,9 +75,9 @@ export default function Home() {
   const [rarity, setRarity] = useState('');
   const [selectedSet, setSelectedSet] = useState('');
   const [catalogStatus, setCatalogStatus] = useState('Cargando catálogo...');
-  const [activeTab, setActiveTab] = useState<'catalog' | 'sets' | 'mine'>(
-    'catalog',
-  );
+  const [activeTab, setActiveTab] = useState<
+    'catalog' | 'sets' | 'mine' | 'advisor'
+  >('catalog');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -64,7 +90,8 @@ export default function Home() {
   const [summary, setSummary] = useState<CollectionSummary | null>(null);
   const [collectionError, setCollectionError] = useState('');
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
-  const [modal, setModal] = useState<'login' | 'add-card' | null>(null);
+  const speech = useSpeech();
+  const [modal, setModal] = useState<AuthMode | 'add-card' | null>(null);
   const [toast, setToast] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginPending, setLoginPending] = useState(false);
@@ -186,14 +213,24 @@ export default function Home() {
       setTotalPages(totalPagesCalc);
       setHasMore(currentPage < totalPagesCalc);
       const setLabel = selectedSet
-        ? ` en ${selectedSet === 'HOB' ? 'The Hobbit' : 'Final Fantasy'}`
+        ? ` en ${
+            selectedSet === 'HOB'
+              ? 'The Hobbit'
+              : selectedSet === 'FRA'
+                ? 'Reality Fracture'
+                : 'Final Fantasy'
+          }`
         : '';
-      setCatalogStatus(`Mostrando ${result.data.length} carta${result.data.length === 1 ? '' : 's'}${setLabel}`);
+      setCatalogStatus(
+        `Mostrando ${result.data.length} carta${result.data.length === 1 ? '' : 's'}${setLabel}`,
+      );
       setLoadingMore(false);
       setLoadingCatalog(false);
     } catch (error) {
       setCards([]);
-      setCatalogStatus(error instanceof Error ? error.message : 'Error al consultar catálogo');
+      setCatalogStatus(
+        error instanceof Error ? error.message : 'Error al consultar catálogo',
+      );
       setLoadingMore(false);
       setLoadingCatalog(false);
     }
@@ -202,7 +239,7 @@ export default function Home() {
   const handleLoadMore = useCallback(() => {
     setLoadingMore(true);
     if (currentPage < totalPages) {
-      setCurrentPage(prev => prev + 1);
+      setCurrentPage((prev) => prev + 1);
     }
   }, [currentPage, totalPages]);
 
@@ -254,7 +291,7 @@ export default function Home() {
     setActiveTab('sets');
   }
 
-  function changeTab(tab: 'catalog' | 'sets' | 'mine') {
+  function changeTab(tab: 'catalog' | 'sets' | 'mine' | 'advisor') {
     setActiveTab(tab);
     if (tab === 'sets') {
       document
@@ -277,23 +314,7 @@ export default function Home() {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
-      if (!login.access_token) {
-        throw new Error('El servidor no devolvió un token de acceso válido');
-      }
-
-      const authenticatedUser = await request<PublicUser>(
-        '/auth/me',
-        {},
-        login.access_token,
-      );
-      setToken(login.access_token);
-      setUser(authenticatedUser);
-      window.localStorage.setItem('jwt_token', login.access_token);
-      window.localStorage.setItem(
-        'user_info',
-        JSON.stringify(authenticatedUser),
-      );
-      setModal(null);
+      const authenticatedUser = await completeAuth(login.access_token);
       showToast(`Bienvenido, ${authenticatedUser.username}`);
     } catch (error) {
       setLoginError(
@@ -302,6 +323,63 @@ export default function Home() {
     } finally {
       setLoginPending(false);
     }
+  }
+
+  async function handleRegister(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginError('');
+    const form = new FormData(event.currentTarget);
+    const username = String(form.get('username') ?? '').trim();
+    const password = String(form.get('password') ?? '');
+    const confirmPassword = String(form.get('confirmPassword') ?? '');
+
+    if (password !== confirmPassword) {
+      setLoginError('Las contraseñas no coinciden');
+      return;
+    }
+
+    setLoginPending(true);
+    try {
+      const registration = await request<{ access_token: string }>(
+        '/auth/register',
+        {
+          method: 'POST',
+          body: JSON.stringify({ username, password }),
+        },
+      );
+      const authenticatedUser = await completeAuth(registration.access_token);
+      showToast(`Cuenta creada. ¡Bienvenido, ${authenticatedUser.username}!`);
+    } catch (error) {
+      setLoginError(
+        error instanceof Error ? error.message : 'No se pudo crear la cuenta',
+      );
+    } finally {
+      setLoginPending(false);
+    }
+  }
+
+  /** Guarda la sesión a partir de un token recién emitido (login o registro). */
+  async function completeAuth(accessToken: string | undefined) {
+    if (!accessToken) {
+      throw new Error('El servidor no devolvió un token de acceso válido');
+    }
+
+    const authenticatedUser = await request<PublicUser>(
+      '/auth/me',
+      {},
+      accessToken,
+    );
+    setToken(accessToken);
+    setUser(authenticatedUser);
+    window.localStorage.setItem('jwt_token', accessToken);
+    window.localStorage.setItem('user_info', JSON.stringify(authenticatedUser));
+    setModal(null);
+    return authenticatedUser;
+  }
+
+  function openAuth(mode: AuthMode) {
+    setLoginError('');
+    setModal(mode);
   }
 
   function logout() {
@@ -316,7 +394,7 @@ export default function Home() {
 
   async function addSelectedCard() {
     if (!token || !selectedCard) {
-      setModal('login');
+      openAuth('login');
       return;
     }
 
@@ -492,13 +570,22 @@ export default function Home() {
                 </button>
               </div>
             ) : (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => setModal('login')}
-                type="button"
-              >
-                Iniciar Sesión
-              </button>
+              <>
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => openAuth('register')}
+                  type="button"
+                >
+                  Registrarse
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => openAuth('login')}
+                  type="button"
+                >
+                  Iniciar Sesión
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -529,9 +616,25 @@ export default function Home() {
             Mi Colección
             <span className="tab-badge">{summary?.totalCards ?? 0}</span>
           </button>
+          <button
+            className={`tab-btn ${activeTab === 'advisor' ? 'active' : ''}`}
+            onClick={() => changeTab('advisor')}
+            type="button"
+          >
+            Asesor IA
+            <span className="tab-badge">Nuevo</span>
+          </button>
         </nav>
 
-        {activeTab !== 'mine' ? (
+        {activeTab === 'advisor' ? (
+          <AdvisorPanel
+            key={user?.username ?? 'guest'}
+            token={token}
+            username={user?.username ?? null}
+            onLogin={() => openAuth('login')}
+            onRegister={() => openAuth('register')}
+          />
+        ) : activeTab !== 'mine' ? (
           <section>
             <div className="collections-section" id="collections-showcase">
               <div className="collections-header">
@@ -681,8 +784,8 @@ export default function Home() {
                   {selectedSet === 'HOB'
                     ? 'The Hobbit (HOB)'
                     : selectedSet === 'FRA'
-                    ? 'Reality Fracture (FRA)'
-                    : 'Final Fantasy (FIN)'}
+                      ? 'Reality Fracture (FRA)'
+                      : 'Final Fantasy (FIN)'}
                 </span>
               )}
             </div>
@@ -716,7 +819,11 @@ export default function Home() {
             </main>
             {hasMore && cards.length > 0 && !loadingMore && (
               <div className="load-more-wrapper">
-                <button className="btn btn-outline" onClick={handleLoadMore} type="button">
+                <button
+                  className="btn btn-outline"
+                  onClick={handleLoadMore}
+                  type="button"
+                >
                   Cargar más
                 </button>
               </div>
@@ -735,18 +842,29 @@ export default function Home() {
             </div>
             {!token ? (
               <div className="collection-auth-warning">
-                <h3>Inicia sesión para gestionar tu colección</h3>
+                <h3>
+                  Inicia sesión o crea una cuenta para gestionar tu colección
+                </h3>
                 <p>
                   Registra cartas de Final Fantasy o The Hobbit en tu inventario
                   personal, marca versiones Foil y administra tus cantidades.
                 </p>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setModal('login')}
-                  type="button"
-                >
-                  Iniciar Sesión
-                </button>
+                <div className="auth-warning-actions">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => openAuth('login')}
+                    type="button"
+                  >
+                    Iniciar Sesión
+                  </button>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => openAuth('register')}
+                    type="button"
+                  >
+                    Crear cuenta
+                  </button>
+                </div>
               </div>
             ) : (
               <>
@@ -806,8 +924,8 @@ export default function Home() {
                                 entry.card.setCode === 'HOB'
                                   ? 'card-hob'
                                   : entry.card.setCode === 'FRA'
-                                  ? 'card-fra'
-                                  : 'card-fin'
+                                    ? 'card-fra'
+                                    : 'card-fin'
                               }`}
                             >
                               {entry.card.setCode}
@@ -904,8 +1022,8 @@ export default function Home() {
                       selectedCard.setCode === 'HOB'
                         ? 'card-hob'
                         : selectedCard.setCode === 'FRA'
-                        ? 'card-fra'
-                        : 'card-fin'
+                          ? 'card-fra'
+                          : 'card-fin'
                     }`}
                   >
                     {selectedCard.setCode}
@@ -916,6 +1034,12 @@ export default function Home() {
               <div className="detail-info">
                 <div>
                   <h2 className="detail-title">{selectedCard.name}</h2>
+                  <SpeakButton
+                    id={`card-${selectedCard.id}`}
+                    segments={cardSpeech(selectedCard)}
+                    speech={speech}
+                    label="Escuchar carta"
+                  />
                   <div className="card-badges detail-badges">
                     <span className="badge">{selectedCard.rarity.name}</span>
                     <span className="badge">{selectedCard.cardType.name}</span>
@@ -964,7 +1088,7 @@ export default function Home() {
                   {!token ? (
                     <button
                       className="btn btn-primary btn-sm"
-                      onClick={() => setModal('login')}
+                      onClick={() => openAuth('login')}
                       type="button"
                     >
                       Inicia sesión para registrar esta carta
@@ -1024,12 +1148,14 @@ export default function Home() {
         </div>
       )}
 
-      {modal === 'login' && (
+      {(modal === 'login' || modal === 'register') && (
         <LoginModal
+          mode={modal}
           error={loginError}
           pending={loginPending}
           onClose={() => setModal(null)}
-          onSubmit={handleLogin}
+          onSubmit={modal === 'register' ? handleRegister : handleLogin}
+          onSwitchMode={openAuth}
         />
       )}
 

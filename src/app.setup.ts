@@ -3,7 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import rateLimit from 'express-rate-limit';
-import { AppModule } from './app.module';
+import { AppModule } from './app.module.js';
 
 /**
  * Crea y configura la aplicación Nest. La usan tanto `main.ts` (servidor

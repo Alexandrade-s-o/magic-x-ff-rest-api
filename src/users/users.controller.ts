@@ -8,14 +8,15 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
-import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { UsersService } from './users.service.js';
+import { CreateUserDto } from './dto/create-user.dto.js';
 
-// No hay endpoint público de registro. Solo un ADMINISTRATOR ya autenticado
-// puede dar de alta otras cuentas (otro admin, o un jugador/PLAYER).
+// El registro público (POST /auth/register) solo crea cuentas PLAYER.
+// Aquí, un ADMINISTRATOR ya autenticado puede dar de alta cuentas con
+// cualquier rol (otro admin, o un jugador/PLAYER).
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMINISTRATOR)

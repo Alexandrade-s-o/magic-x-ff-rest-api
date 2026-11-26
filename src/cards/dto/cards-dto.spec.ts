@@ -1,7 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateCardDto } from './create-card.dto';
-import { UpdateCardDto } from './update-card.dto';
+import { CreateCardDto } from './create-card.dto.js';
+import { UpdateCardDto } from './update-card.dto.js';
 
 describe('card DTO validation', () => {
   const validationOptions = {

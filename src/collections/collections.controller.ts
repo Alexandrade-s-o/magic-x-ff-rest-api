@@ -14,10 +14,10 @@ import {
   ParseIntPipe,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CollectionsService } from './collections.service';
-import { CreateCollectionEntryDto } from './dto/create-collection-entry.dto';
-import { UpdateCollectionEntryDto } from './dto/update-collection-entry.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { CollectionsService } from './collections.service.js';
+import { CreateCollectionEntryDto } from './dto/create-collection-entry.dto.js';
+import { UpdateCollectionEntryDto } from './dto/update-collection-entry.dto.js';
 
 type AuthenticatedRequest = { user: { id: string } };
 

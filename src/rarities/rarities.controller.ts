@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { RaritiesService } from './rarities.service';
+import { RaritiesService } from './rarities.service.js';
 
 @Controller('rarities')
 export class RaritiesController {
