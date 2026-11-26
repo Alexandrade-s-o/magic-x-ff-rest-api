@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { PrismaService } from '../src/prisma/prisma.service.js';
 
 // Set code de "Reality Fracture" (expansión principal, 462 cartas, 2026-10-02).
 // Se incluyen solo las impresiones de la expansión (unique=prints), ordenadas

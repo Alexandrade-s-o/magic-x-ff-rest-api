@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import { PrismaService } from '../src/prisma/prisma.service';
-import { hashPassword } from '../src/auth/password';
+import { PrismaService } from '../src/prisma/prisma.service.js';
+import { hashPassword } from '../src/auth/password.js';
 import { UserRole } from '@prisma/client';
 
 async function seedUsers() {

@@ -26,6 +26,7 @@ const nextConfig: NextConfig = {
       '/collections',
       '/rarities',
       '/users',
+      '/advisor',
     ];
 
     return apiPaths.flatMap((apiPath) => [

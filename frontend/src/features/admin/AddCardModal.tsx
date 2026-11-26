@@ -1,4 +1,7 @@
+'use client';
+
 import type { FormEventHandler } from 'react';
+import { useI18n } from '@/features/i18n/I18nProvider';
 import { FormInput } from './FormInput';
 
 type AddCardModalProps = {
@@ -14,6 +17,8 @@ export function AddCardModal({
   onClose,
   onSubmit,
 }: AddCardModalProps) {
+  const { dict } = useI18n();
+  const t = dict.admin;
   return (
     <div
       className="modal-backdrop active"
@@ -25,19 +30,19 @@ export function AddCardModal({
         <button
           className="close-btn"
           onClick={onClose}
-          aria-label="Cerrar"
+          aria-label={t.close}
           type="button"
         >
           ×
         </button>
-        <h2 className="add-card-heading">Registrar Nueva Carta</h2>
-        <p className="add-card-subtitle">Panel para administradores.</p>
+        <h2 className="add-card-heading">{t.title}</h2>
+        <p className="add-card-subtitle">{t.subtitle}</p>
         <form onSubmit={onSubmit}>
           <div className="form-grid">
-            <FormInput name="name" label="Nombre de la Carta *" required />
+            <FormInput name="name" label={t.name} required />
             <div className="form-group">
               <label className="form-label" htmlFor="card-set">
-                Colección (Set) *
+                {t.set}
               </label>
               <select
                 id="card-set"
@@ -48,41 +53,37 @@ export function AddCardModal({
               >
                 <option value="HOB">The Hobbit (HOB)</option>
                 <option value="FIN">Final Fantasy (FIN)</option>
+                <option value="FRA">Reality Fracture (FRA)</option>
               </select>
             </div>
             <FormInput
               name="rarity"
-              label="Rareza *"
+              label={t.rarity}
               placeholder="mythic, rare, uncommon, common"
               required
             />
             <FormInput
               name="type"
-              label="Tipo de Carta *"
+              label={t.type}
               placeholder="Legendary Creature — Halfling..."
               required
             />
             <FormInput
               name="collectorNumber"
-              label="N.º Coleccionista *"
+              label={t.collectorNumber}
               required
             />
-            <FormInput name="manaCost" label="Coste de Maná" />
+            <FormInput name="manaCost" label={t.manaCost} />
             <FormInput
               name="stats"
-              label="Fuerza / Resistencia"
-              placeholder="Ej: 2/2"
+              label={t.stats}
+              placeholder={t.statsPlaceholder}
             />
-            <FormInput name="artist" label="Artista" />
-            <FormInput
-              name="imageUrl"
-              label="URL de la Imagen"
-              type="url"
-              full
-            />
+            <FormInput name="artist" label={t.artist} />
+            <FormInput name="imageUrl" label={t.imageUrl} type="url" full />
             <div className="form-group full">
               <label className="form-label" htmlFor="card-oracle">
-                Texto de Habilidad (Oracle Text)
+                {t.oracle}
               </label>
               <textarea
                 id="card-oracle"
@@ -98,14 +99,14 @@ export function AddCardModal({
           )}
           <div className="form-actions">
             <button className="btn btn-outline" onClick={onClose} type="button">
-              Cancelar
+              {t.cancel}
             </button>
             <button
               className="btn btn-primary"
               type="submit"
               disabled={pending}
             >
-              {pending ? 'Guardando...' : 'Guardar Carta'}
+              {pending ? t.saving : t.save}
             </button>
           </div>
         </form>

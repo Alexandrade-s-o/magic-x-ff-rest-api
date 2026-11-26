@@ -13,8 +13,16 @@ import type {
   SetInfo,
 } from '@/types/magic';
 import { AddCardModal } from '@/features/admin/AddCardModal';
-import { LoginModal } from '@/features/auth/LoginModal';
+import { LoginModal, type AuthMode } from '@/features/auth/LoginModal';
+import { AdvisorPanel } from '@/features/advisor/AdvisorPanel';
+import { SpeakButton } from '@/features/a11y/SpeakButton';
+import { useSpeech, type SpeechSegment } from '@/features/a11y/useSpeech';
 import { VirtualizedCardGrid } from '@/features/magic/VirtualizedCardGrid';
+import { useI18n } from '@/features/i18n/I18nProvider';
+import { LanguageSwitcher } from '@/features/i18n/LanguageSwitcher';
+import { errorText } from '@/features/i18n/errors';
+import { rarityLabel, setName } from '@/features/i18n/labels';
+import { format, type Dictionary, type Locale } from '@/i18n';
 
 // Skeleton loading components
 const SkeletonCard = () => (
@@ -38,9 +46,59 @@ const SkeletonGrid = ({ count = 12 }) => (
 
 const fallbackImage = '/img/MTG.png';
 
+/**
+ * Lo que lee «Escuchar carta»: los rótulos en el idioma de la página y el
+ * nombre, el tipo y el texto de la carta (oficiales, en inglés) con voz inglesa.
+ */
+function cardSpeech(
+  card: Card,
+  dict: Dictionary,
+  lang: Locale,
+): SpeechSegment[] {
+  const t = dict.card;
+  const segments: SpeechSegment[] = [
+    { lang: 'en', text: `${card.name}.` },
+    {
+      lang,
+      text: format(t.speechRarity, {
+        rarity: rarityLabel(card.rarity.name, dict),
+      }),
+    },
+    { lang: 'en', text: `${card.cardType.name}.` },
+  ];
+  if (card.manaCost) {
+    segments.push({
+      lang,
+      text: format(t.speechCost, { cost: card.manaCost }),
+    });
+  }
+  if (card.oracleText) {
+    segments.push(
+      { lang, text: t.speechText },
+      { lang: 'en', text: card.oracleText },
+    );
+  }
+  if (card.power && card.toughness) {
+    segments.push({
+      lang,
+      text: format(t.speechStats, {
+        power: card.power,
+        toughness: card.toughness,
+      }),
+    });
+  }
+  return segments;
+}
+
+/** Clase de color de cada colección. */
+function setClass(code: string): string {
+  return code === 'HOB' ? 'card-hob' : code === 'FRA' ? 'card-fra' : 'card-fin';
+}
+
 const CARDS_PER_PAGE = 50;
 
 export default function Home() {
+  const { lang, dict } = useI18n();
   const [cards, setCards] = useState<Card[]>([]);
   const [sets, setSets] = useState<SetInfo[]>([]);
   const [rarities, setRarities] = useState<{ name: string }[]>([]);
@@ -48,10 +106,14 @@ export default function Home() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [rarity, setRarity] = useState('');
   const [selectedSet, setSelectedSet] = useState('');
-  const [catalogStatus, setCatalogStatus] = useState('Cargando catálogo...');
-  const [activeTab, setActiveTab] = useState<'catalog' | 'sets' | 'mine'>(
-    'catalog',
-  );
+  // count null = cargando; error = mensaje ya traducido.
+  const [catalogState, setCatalogState] = useState<{
+    count: number | null;
+    error: string | null;
+  }>({ count: null, error: null });
+  const [activeTab, setActiveTab] = useState<
+    'catalog' | 'sets' | 'mine' | 'advisor'
+  >('catalog');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -64,7 +126,8 @@ export default function Home() {
   const [summary, setSummary] = useState<CollectionSummary | null>(null);
   const [collectionError, setCollectionError] = useState('');
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
-  const [modal, setModal] = useState<'login' | 'add-card' | null>(null);
+  const speech = useSpeech();
+  const [modal, setModal] = useState<AuthMode | 'add-card' | null>(null);
   const [toast, setToast] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginPending, setLoginPending] = useState(false);
@@ -140,26 +203,25 @@ export default function Home() {
     return () => window.clearTimeout(timeout);
   }, [search]);
 
-  const loadCollection = useCallback(async (activeToken: string) => {
-    setLoadingCollection(true);
-    setCollectionError('');
-    try {
-      const [nextSummary, nextPage] = await Promise.all([
-        request<CollectionSummary>('/collections/summary', {}, activeToken),
-        request<CollectionPage>('/collections', {}, activeToken),
-      ]);
-      setSummary(nextSummary);
-      setEntries(nextPage.data);
-    } catch (error) {
-      setCollectionError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo cargar tu colección',
-      );
-    } finally {
-      setLoadingCollection(false);
-    }
-  }, []);
+  const loadCollection = useCallback(
+    async (activeToken: string) => {
+      setLoadingCollection(true);
+      setCollectionError('');
+      try {
+        const [nextSummary, nextPage] = await Promise.all([
+          request<CollectionSummary>('/collections/summary', {}, activeToken),
+          request<CollectionPage>('/collections', {}, activeToken),
+        ]);
+        setSummary(nextSummary);
+        setEntries(nextPage.data);
+      } catch (error) {
+        setCollectionError(errorText(error, dict));
+      } finally {
+        setLoadingCollection(false);
+      }
+    },
+    [dict],
+  );
 
   useEffect(() => {
     if (!token) return;
@@ -171,7 +233,7 @@ export default function Home() {
 
   const loadCards = useCallback(async () => {
     setLoadingCatalog(true);
-    setCatalogStatus('Buscando cartas...');
+    setCatalogState({ count: null, error: null });
     const params = new URLSearchParams();
     if (debouncedSearch) params.set('search', debouncedSearch);
     if (rarity) params.set('rarity', rarity);
@@ -185,24 +247,21 @@ export default function Home() {
       const totalPagesCalc = Math.ceil(result.meta.total / CARDS_PER_PAGE);
       setTotalPages(totalPagesCalc);
       setHasMore(currentPage < totalPagesCalc);
-      const setLabel = selectedSet
-        ? ` en ${selectedSet === 'HOB' ? 'The Hobbit' : 'Final Fantasy'}`
-        : '';
-      setCatalogStatus(`Mostrando ${result.data.length} carta${result.data.length === 1 ? '' : 's'}${setLabel}`);
+      setCatalogState({ count: result.data.length, error: null });
       setLoadingMore(false);
       setLoadingCatalog(false);
     } catch (error) {
       setCards([]);
-      setCatalogStatus(error instanceof Error ? error.message : 'Error al consultar catálogo');
+      setCatalogState({ count: null, error: errorText(error, dict) });
       setLoadingMore(false);
       setLoadingCatalog(false);
     }
-  }, [debouncedSearch, rarity, selectedSet, currentPage]);
+  }, [debouncedSearch, rarity, selectedSet, currentPage, dict]);
 
   const handleLoadMore = useCallback(() => {
     setLoadingMore(true);
     if (currentPage < totalPages) {
-      setCurrentPage(prev => prev + 1);
+      setCurrentPage((prev) => prev + 1);
     }
   }, [currentPage, totalPages]);
 
@@ -219,18 +278,14 @@ export default function Home() {
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          showToast(
-            error instanceof Error
-              ? error.message
-              : 'No se pudieron cargar los filtros del catálogo',
-          );
+          showToast(errorText(error, dict));
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [showToast]);
+  }, [showToast, dict]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -254,7 +309,7 @@ export default function Home() {
     setActiveTab('sets');
   }
 
-  function changeTab(tab: 'catalog' | 'sets' | 'mine') {
+  function changeTab(tab: 'catalog' | 'sets' | 'mine' | 'advisor') {
     setActiveTab(tab);
     if (tab === 'sets') {
       document
@@ -277,31 +332,79 @@ export default function Home() {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
-      if (!login.access_token) {
-        throw new Error('El servidor no devolvió un token de acceso válido');
-      }
-
-      const authenticatedUser = await request<PublicUser>(
-        '/auth/me',
-        {},
-        login.access_token,
+      const authenticatedUser = await completeAuth(login.access_token);
+      showToast(
+        format(dict.auth.welcome, { name: authenticatedUser.username }),
       );
-      setToken(login.access_token);
-      setUser(authenticatedUser);
-      window.localStorage.setItem('jwt_token', login.access_token);
-      window.localStorage.setItem(
-        'user_info',
-        JSON.stringify(authenticatedUser),
-      );
-      setModal(null);
-      showToast(`Bienvenido, ${authenticatedUser.username}`);
     } catch (error) {
       setLoginError(
-        error instanceof Error ? error.message : 'No se pudo iniciar sesión',
+        errorText(error, dict, { 401: dict.auth.invalidCredentials }),
       );
     } finally {
       setLoginPending(false);
     }
+  }
+
+  async function handleRegister(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginError('');
+    const form = new FormData(event.currentTarget);
+    const username = String(form.get('username') ?? '').trim();
+    const password = String(form.get('password') ?? '');
+    const confirmPassword = String(form.get('confirmPassword') ?? '');
+
+    if (password !== confirmPassword) {
+      setLoginError(dict.auth.passwordsMismatch);
+      return;
+    }
+
+    setLoginPending(true);
+    try {
+      const registration = await request<{ access_token: string }>(
+        '/auth/register',
+        {
+          method: 'POST',
+          body: JSON.stringify({ username, password }),
+        },
+      );
+      const authenticatedUser = await completeAuth(registration.access_token);
+      showToast(
+        format(dict.auth.registered, { name: authenticatedUser.username }),
+      );
+    } catch (error) {
+      setLoginError(
+        errorText(error, dict, {
+          400: dict.auth.registerInvalid,
+          409: dict.auth.usernameTaken,
+        }),
+      );
+    } finally {
+      setLoginPending(false);
+    }
+  }
+
+  /** Guarda la sesión a partir de un token recién emitido (login o registro). */
+  async function completeAuth(accessToken: string | undefined) {
+    if (!accessToken) {
+      throw new Error(dict.errors.generic);
+    }
+
+    const authenticatedUser = await request<PublicUser>(
+      '/auth/me',
+      {},
+      accessToken,
+    );
+    setToken(accessToken);
+    setUser(authenticatedUser);
+    window.localStorage.setItem('jwt_token', accessToken);
+    window.localStorage.setItem('user_info', JSON.stringify(authenticatedUser));
+    setModal(null);
+    return authenticatedUser;
+  }
+
+  function openAuth(mode: AuthMode) {
+    setLoginError('');
+    setModal(mode);
   }
 
   function logout() {
@@ -311,12 +414,12 @@ export default function Home() {
     setSummary(null);
     window.localStorage.removeItem('jwt_token');
     window.localStorage.removeItem('user_info');
-    showToast('Sesión cerrada');
+    showToast(dict.auth.loggedOut);
   }
 
   async function addSelectedCard() {
     if (!token || !selectedCard) {
-      setModal('login');
+      openAuth('login');
       return;
     }
 
@@ -333,12 +436,12 @@ export default function Home() {
         },
         token,
       );
-      showToast(`${quantity}x "${selectedCard.name}" añadida a tu colección`);
+      showToast(
+        format(dict.collection.added, { quantity, name: selectedCard.name }),
+      );
       await loadCollection(token);
     } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : 'No se pudo agregar la carta',
-      );
+      showToast(errorText(error, dict));
     }
   }
 
@@ -359,9 +462,7 @@ export default function Home() {
       );
       await loadCollection(token);
     } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : 'Error al actualizar cantidad',
-      );
+      showToast(errorText(error, dict));
     }
   }
 
@@ -369,12 +470,10 @@ export default function Home() {
     if (!token) return;
     try {
       await request<void>(`/collections/${id}`, { method: 'DELETE' }, token);
-      showToast('Carta eliminada de tu colección');
+      showToast(dict.collection.removed);
       await loadCollection(token);
     } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : 'Error al eliminar carta',
-      );
+      showToast(errorText(error, dict));
     }
   }
 
@@ -410,14 +509,12 @@ export default function Home() {
       );
       setModal(null);
       formElement.reset();
-      showToast('Carta agregada al catálogo');
+      showToast(dict.admin.saved);
       const availableSets = await request<SetInfo[]>('/cards/sets');
       setSets(availableSets);
       await loadCards();
     } catch (error) {
-      setAddCardError(
-        error instanceof Error ? error.message : 'Error al guardar la carta',
-      );
+      setAddCardError(errorText(error, dict));
     } finally {
       setAddCardPending(false);
     }
@@ -431,6 +528,17 @@ export default function Home() {
     0,
   );
 
+  const catalogStatus =
+    catalogState.error ??
+    (catalogState.count === null
+      ? dict.catalog.loading
+      : (catalogState.count === 1
+          ? dict.catalog.showingOne
+          : format(dict.catalog.showing, { count: catalogState.count })) +
+        (selectedSet
+          ? format(dict.catalog.inSet, { set: setName(selectedSet) })
+          : ''));
+
   return (
     <>
       <header className="main-header">
@@ -442,20 +550,19 @@ export default function Home() {
           >
             <img
               src="/img/magic-logo.svg"
-              alt="Magic: The Gathering"
+              alt={dict.header.logoAlt}
               className="brand-logo-img"
             />
             <span className="brand-divider" />
-            <span className="brand-subtitle-badge">
-              Final Fantasy &amp; The Hobbit &amp; Reality Fracture
-            </span>
+            <span className="brand-subtitle-badge">{dict.header.subtitle}</span>
           </button>
           <div className="header-actions">
+            <LanguageSwitcher />
             <button
               className="btn btn-outline btn-icon"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              title="Alternar tema"
-              aria-label="Alternar tema"
+              title={dict.header.toggleTheme}
+              aria-label={dict.header.toggleTheme}
               type="button"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -474,7 +581,7 @@ export default function Home() {
                 onClick={() => setModal('add-card')}
                 type="button"
               >
-                Nueva Carta
+                {dict.header.newCard}
               </button>
             )}
             {user ? (
@@ -488,59 +595,83 @@ export default function Home() {
                   onClick={logout}
                   type="button"
                 >
-                  Salir
+                  {dict.header.logout}
                 </button>
               </div>
             ) : (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => setModal('login')}
-                type="button"
-              >
-                Iniciar Sesión
-              </button>
+              <>
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() => openAuth('register')}
+                  type="button"
+                >
+                  {dict.header.register}
+                </button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => openAuth('login')}
+                  type="button"
+                >
+                  {dict.header.login}
+                </button>
+              </>
             )}
           </div>
         </div>
       </header>
 
       <div className="app-container">
-        <nav className="tabs-nav" aria-label="Secciones principales">
+        <nav className="tabs-nav" aria-label={dict.tabs.navLabel}>
           <button
             className={`tab-btn ${activeTab === 'catalog' ? 'active' : ''}`}
             onClick={() => changeTab('catalog')}
             type="button"
           >
-            Catálogo General
+            {dict.tabs.catalog}
           </button>
           <button
             className={`tab-btn ${activeTab === 'sets' ? 'active' : ''}`}
             onClick={() => changeTab('sets')}
             type="button"
           >
-            Búsqueda por Colección
-            <span className="tab-badge">{sets.length} Sets</span>
+            {dict.tabs.sets}
+            <span className="tab-badge">
+              {format(dict.tabs.setsBadge, { count: sets.length })}
+            </span>
           </button>
           <button
             className={`tab-btn ${activeTab === 'mine' ? 'active' : ''}`}
             onClick={() => changeTab('mine')}
             type="button"
           >
-            Mi Colección
+            {dict.tabs.mine}
             <span className="tab-badge">{summary?.totalCards ?? 0}</span>
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'advisor' ? 'active' : ''}`}
+            onClick={() => changeTab('advisor')}
+            type="button"
+          >
+            {dict.tabs.advisor}
+            <span className="tab-badge">{dict.tabs.newBadge}</span>
           </button>
         </nav>
 
-        {activeTab !== 'mine' ? (
+        {activeTab === 'advisor' ? (
+          <AdvisorPanel
+            key={user?.username ?? 'guest'}
+            token={token}
+            username={user?.username ?? null}
+            onLogin={() => openAuth('login')}
+            onRegister={() => openAuth('register')}
+          />
+        ) : activeTab !== 'mine' ? (
           <section>
             <div className="collections-section" id="collections-showcase">
               <div className="collections-header">
                 <div>
-                  <h2 className="section-title">Colecciones Disponibles</h2>
-                  <p className="section-subtitle">
-                    Selecciona una colección para restringir la búsqueda a sus
-                    cartas oficiales
-                  </p>
+                  <h2 className="section-title">{dict.sets.title}</h2>
+                  <p className="section-subtitle">{dict.sets.subtitle}</p>
                 </div>
                 {selectedSet && (
                   <button
@@ -548,7 +679,7 @@ export default function Home() {
                     onClick={() => selectSet('')}
                     type="button"
                   >
-                    Ver todas las cartas
+                    {dict.sets.showAll}
                   </button>
                 )}
               </div>
@@ -562,14 +693,16 @@ export default function Home() {
                     <img
                       src="/img/sauron-ring.jpg"
                       className="franchise-thumb"
-                      alt="Anillo de Sauron"
+                      alt={dict.sets.hobbitAlt}
                     />
                     <span className="collection-meta">
                       <strong>The Hobbit</strong>
                       <span>
-                        {sets.find((set) => set.setCode === 'HOB')
-                          ?.totalCards ?? 0}{' '}
-                        cartas registradas
+                        {format(dict.sets.registered, {
+                          count:
+                            sets.find((set) => set.setCode === 'HOB')
+                              ?.totalCards ?? 0,
+                        })}
                       </span>
                     </span>
                   </span>
@@ -584,14 +717,16 @@ export default function Home() {
                     <img
                       src="/img/cloud-sword.jpg"
                       className="franchise-thumb"
-                      alt="Espada de Cloud"
+                      alt={dict.sets.finalFantasyAlt}
                     />
                     <span className="collection-meta">
                       <strong>Final Fantasy</strong>
                       <span>
-                        {sets.find((set) => set.setCode === 'FIN')
-                          ?.totalCards ?? 0}{' '}
-                        cartas registradas
+                        {format(dict.sets.registered, {
+                          count:
+                            sets.find((set) => set.setCode === 'FIN')
+                              ?.totalCards ?? 0,
+                        })}
                       </span>
                     </span>
                   </span>
@@ -606,14 +741,16 @@ export default function Home() {
                     <img
                       src="/img/MTG.png"
                       className="franchise-thumb"
-                      alt="Jace, Reality Sculptor"
+                      alt={dict.sets.realityFractureAlt}
                     />
                     <span className="collection-meta">
                       <strong>Reality Fracture</strong>
                       <span>
-                        {sets.find((set) => set.setCode === 'FRA')
-                          ?.totalCards ?? 0}{' '}
-                        cartas registradas
+                        {format(dict.sets.registered, {
+                          count:
+                            sets.find((set) => set.setCode === 'FRA')
+                              ?.totalCards ?? 0,
+                        })}
                       </span>
                     </span>
                   </span>
@@ -631,11 +768,15 @@ export default function Home() {
                       </svg>
                     </span>
                     <span className="collection-meta">
-                      <strong>Todas las Colecciones</strong>
-                      <span>{totalSetCards} cartas en total</span>
+                      <strong>{dict.sets.allTitle}</strong>
+                      <span>
+                        {format(dict.sets.allTotal, { count: totalSetCards })}
+                      </span>
                     </span>
                   </span>
-                  <span className="collection-pill-code">TODAS</span>
+                  <span className="collection-pill-code">
+                    {dict.sets.allCode}
+                  </span>
                 </button>
               </div>
             </div>
@@ -652,7 +793,8 @@ export default function Home() {
                 <input
                   type="search"
                   className="search-input"
-                  placeholder="Buscar carta por nombre (ej: Bilbo, Cloud, Jace, Gandalf)..."
+                  placeholder={dict.catalog.searchPlaceholder}
+                  aria-label={dict.catalog.searchLabel}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   autoComplete="off"
@@ -660,14 +802,14 @@ export default function Home() {
               </div>
               <select
                 className="select-input"
-                aria-label="Filtrar por rareza"
+                aria-label={dict.catalog.rarityFilter}
                 value={rarity}
                 onChange={(event) => setRarity(event.target.value)}
               >
-                <option value="">Todas las Rarezas</option>
+                <option value="">{dict.catalog.allRarities}</option>
                 {rarities.map((item) => (
                   <option value={item.name} key={item.name}>
-                    {item.name.charAt(0).toUpperCase() + item.name.slice(1)}
+                    {rarityLabel(item.name, dict)}
                   </option>
                 ))}
               </select>
@@ -677,12 +819,9 @@ export default function Home() {
               <span>{catalogStatus}</span>
               {selectedSet && (
                 <span className="active-collection-banner">
-                  Colección activa:{' '}
-                  {selectedSet === 'HOB'
-                    ? 'The Hobbit (HOB)'
-                    : selectedSet === 'FRA'
-                    ? 'Reality Fracture (FRA)'
-                    : 'Final Fantasy (FIN)'}
+                  {format(dict.catalog.activeSet, {
+                    set: `${setName(selectedSet)} (${selectedSet})`,
+                  })}
                 </span>
               )}
             </div>
@@ -702,51 +841,57 @@ export default function Home() {
               ) : (
                 <div className="empty-state">
                   <h3>
-                    {catalogStatus.startsWith('Error')
-                      ? 'No se pudo cargar el catálogo'
-                      : 'No se encontraron cartas'}
+                    {catalogState.error
+                      ? dict.catalog.loadError
+                      : dict.catalog.empty}
                   </h3>
-                  <p>
-                    {catalogStatus.startsWith('Error')
-                      ? catalogStatus
-                      : 'Modifica los términos de búsqueda o selecciona otra colección.'}
-                  </p>
+                  <p>{catalogState.error ?? dict.catalog.emptyHint}</p>
                 </div>
               )}
             </main>
             {hasMore && cards.length > 0 && !loadingMore && (
               <div className="load-more-wrapper">
-                <button className="btn btn-outline" onClick={handleLoadMore} type="button">
-                  Cargar más
+                <button
+                  className="btn btn-outline"
+                  onClick={handleLoadMore}
+                  type="button"
+                >
+                  {dict.catalog.loadMore}
                 </button>
               </div>
             )}
-            {loadingMore && <div className="loading-more">Cargando…</div>}
+            {loadingMore && (
+              <div className="loading-more">{dict.catalog.loadingMore}</div>
+            )}
           </section>
         ) : (
           <section className="user-collection-section">
             <div className="collections-header">
               <div>
-                <h2 className="section-title">Mi Colección Personal</h2>
-                <p className="section-subtitle">
-                  Inventario de cartas registradas en tu cuenta
-                </p>
+                <h2 className="section-title">{dict.collection.title}</h2>
+                <p className="section-subtitle">{dict.collection.subtitle}</p>
               </div>
             </div>
             {!token ? (
               <div className="collection-auth-warning">
-                <h3>Inicia sesión para gestionar tu colección</h3>
-                <p>
-                  Registra cartas de Final Fantasy o The Hobbit en tu inventario
-                  personal, marca versiones Foil y administra tus cantidades.
-                </p>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setModal('login')}
-                  type="button"
-                >
-                  Iniciar Sesión
-                </button>
+                <h3>{dict.collection.authTitle}</h3>
+                <p>{dict.collection.authText}</p>
+                <div className="auth-warning-actions">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => openAuth('login')}
+                    type="button"
+                  >
+                    {dict.header.login}
+                  </button>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => openAuth('register')}
+                    type="button"
+                  >
+                    {dict.auth.submitRegister}
+                  </button>
+                </div>
               </div>
             ) : (
               <>
@@ -757,33 +902,50 @@ export default function Home() {
                 )}
                 <div className="kpi-grid">
                   <div className="kpi-card">
-                    <span className="kpi-label">Total de Cartas</span>
+                    <span className="kpi-label">
+                      {dict.collection.totalCards}
+                    </span>
                     <span className="kpi-value">
                       {summary?.totalCards ?? 0}
                     </span>
-                    <span className="kpi-sub">Copias registradas</span>
+                    <span className="kpi-sub">
+                      {dict.collection.totalCardsSub}
+                    </span>
                   </div>
                   <div className="kpi-card">
-                    <span className="kpi-label">Cartas Únicas</span>
+                    <span className="kpi-label">
+                      {dict.collection.uniqueCards}
+                    </span>
                     <span className="kpi-value">
                       {summary?.uniqueCards ?? 0}
                     </span>
-                    <span className="kpi-sub">Modelos diferentes</span>
+                    <span className="kpi-sub">
+                      {dict.collection.uniqueCardsSub}
+                    </span>
                   </div>
                   <div className="kpi-card">
-                    <span className="kpi-label">Por Rarezas</span>
+                    <span className="kpi-label">
+                      {dict.collection.byRarity}
+                    </span>
                     <span className="kpi-value kpi-rarities">
                       {summary
                         ? Object.entries(summary.byRarity)
-                            .map(([name, count]) => `${name}: ${count}`)
-                            .join(' · ') || 'Sin cartas registradas'
+                            .map(
+                              ([name, count]) =>
+                                `${rarityLabel(name, dict)}: ${count}`,
+                            )
+                            .join(' · ') || dict.collection.noCards
                         : '—'}
                     </span>
-                    <span className="kpi-sub">Distribución en inventario</span>
+                    <span className="kpi-sub">
+                      {dict.collection.byRaritySub}
+                    </span>
                   </div>
                 </div>
                 {loadingCollection ? (
-                  <p className="collection-loading">Cargando colección...</p>
+                  <p className="collection-loading">
+                    {dict.collection.loading}
+                  </p>
                 ) : entries.length ? (
                   <div className="collection-list">
                     {entries.map((entry) => (
@@ -802,18 +964,12 @@ export default function Home() {
                           </strong>
                           <div className="entry-badges">
                             <span
-                              className={`collection-pill-code ${
-                                entry.card.setCode === 'HOB'
-                                  ? 'card-hob'
-                                  : entry.card.setCode === 'FRA'
-                                  ? 'card-fra'
-                                  : 'card-fin'
-                              }`}
+                              className={`collection-pill-code ${setClass(entry.card.setCode)}`}
                             >
                               {entry.card.setCode}
                             </span>
                             <span className="badge">
-                              {entry.card.rarity.name}
+                              {rarityLabel(entry.card.rarity.name, dict)}
                             </span>
                             {entry.isFoil && (
                               <span className="entry-foil-badge">FOIL</span>
@@ -827,7 +983,8 @@ export default function Home() {
                               onClick={() =>
                                 void updateEntry(entry, entry.quantity - 1)
                               }
-                              title="Reducir cantidad"
+                              title={dict.collection.decrease}
+                              aria-label={dict.collection.decrease}
                               type="button"
                             >
                               -
@@ -840,7 +997,8 @@ export default function Home() {
                               onClick={() =>
                                 void updateEntry(entry, entry.quantity + 1)
                               }
-                              title="Aumentar cantidad"
+                              title={dict.collection.increase}
+                              aria-label={dict.collection.increase}
                               type="button"
                             >
                               +
@@ -851,7 +1009,7 @@ export default function Home() {
                             onClick={() => void removeEntry(entry.id)}
                             type="button"
                           >
-                            Eliminar
+                            {dict.collection.remove}
                           </button>
                         </div>
                       </article>
@@ -859,11 +1017,8 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="empty-collection">
-                    <h4>Tu colección está vacía</h4>
-                    <p>
-                      Explora el catálogo y pulsa en “Añadir a Colección” en
-                      cualquier carta.
-                    </p>
+                    <h4>{dict.collection.emptyTitle}</h4>
+                    <p>{dict.collection.emptyText}</p>
                   </div>
                 )}
               </>
@@ -883,7 +1038,7 @@ export default function Home() {
             <button
               className="close-btn"
               onClick={() => setSelectedCard(null)}
-              aria-label="Cerrar"
+              aria-label={dict.card.close}
               type="button"
             >
               ×
@@ -900,13 +1055,7 @@ export default function Home() {
                 />
                 <div className="detail-pills">
                   <span
-                    className={`collection-pill-code ${
-                      selectedCard.setCode === 'HOB'
-                        ? 'card-hob'
-                        : selectedCard.setCode === 'FRA'
-                        ? 'card-fra'
-                        : 'card-fin'
-                    }`}
+                    className={`collection-pill-code ${setClass(selectedCard.setCode)}`}
                   >
                     {selectedCard.setCode}
                   </span>
@@ -916,67 +1065,75 @@ export default function Home() {
               <div className="detail-info">
                 <div>
                   <h2 className="detail-title">{selectedCard.name}</h2>
+                  <SpeakButton
+                    id={`card-${selectedCard.id}`}
+                    segments={cardSpeech(selectedCard, dict, lang)}
+                    speech={speech}
+                    label={dict.card.listen}
+                  />
                   <div className="card-badges detail-badges">
-                    <span className="badge">{selectedCard.rarity.name}</span>
+                    <span className="badge">
+                      {rarityLabel(selectedCard.rarity.name, dict)}
+                    </span>
                     <span className="badge">{selectedCard.cardType.name}</span>
                     <span className="badge">
                       {selectedCard.manaCost
-                        ? `Maná: ${selectedCard.manaCost}`
-                        : 'Sin coste'}
+                        ? format(dict.card.mana, {
+                            cost: selectedCard.manaCost,
+                          })
+                        : dict.card.noCost}
                     </span>
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-label">
-                    Texto de Habilidad (Oracle Text)
-                  </span>
+                  <span className="detail-label">{dict.card.oracleLabel}</span>
                   <div className="oracle-box">
-                    {selectedCard.oracleText ||
-                      'Sin texto de reglas registrado.'}
+                    {selectedCard.oracleText || dict.card.noOracle}
                   </div>
                 </div>
                 <div className="detail-stats-grid">
                   <div className="detail-field">
-                    <span className="detail-label">Fuerza / Resistencia</span>
+                    <span className="detail-label">{dict.card.statsLabel}</span>
                     <span className="detail-value">
                       {selectedCard.power || selectedCard.toughness
                         ? `${selectedCard.power || '?'} / ${selectedCard.toughness || '?'}`
-                        : 'N/A'}
+                        : dict.card.notApplicable}
                     </span>
                   </div>
                   <div className="detail-field">
-                    <span className="detail-label">Colección de Origen</span>
+                    <span className="detail-label">{dict.card.setLabel}</span>
                     <span className="detail-value">
-                      {selectedCard.setCode === 'HOB'
-                        ? 'The Hobbit (HOB)'
-                        : 'Final Fantasy (FIN)'}
+                      {`${setName(selectedCard.setCode)} (${selectedCard.setCode})`}
                     </span>
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-label">Artista</span>
+                  <span className="detail-label">{dict.card.artistLabel}</span>
                   <span className="detail-value">
-                    {selectedCard.artist || 'Desconocido'}
+                    {selectedCard.artist || dict.card.unknownArtist}
                   </span>
                 </div>
                 <div className="add-to-coll-box">
-                  <h4>Guardar en Mi Colección Personal</h4>
+                  <h4>{dict.card.saveTitle}</h4>
                   {!token ? (
                     <button
                       className="btn btn-primary btn-sm"
-                      onClick={() => setModal('login')}
+                      onClick={() => openAuth('login')}
                       type="button"
                     >
-                      Inicia sesión para registrar esta carta
+                      {dict.card.loginToSave}
                     </button>
                   ) : (
                     <>
                       {ownedQuantity > 0 && (
                         <p className="owned-message">
-                          En tu colección: {ownedQuantity} copia
-                          {ownedQuantity === 1 ? '' : 's'}
+                          {ownedQuantity === 1
+                            ? dict.card.ownedOne
+                            : format(dict.card.ownedMany, {
+                                count: ownedQuantity,
+                              })}
                           {ownedEntries.some((entry) => entry.isFoil)
-                            ? ' (incluye Foil)'
+                            ? dict.card.ownedFoil
                             : ''}
                           .
                         </p>
@@ -988,10 +1145,10 @@ export default function Home() {
                             checked={foil}
                             onChange={(event) => setFoil(event.target.checked)}
                           />
-                          Versión Foil
+                          {dict.card.foil}
                         </label>
                         <label className="quantity-control">
-                          Cantidad:
+                          {dict.card.quantity}
                           <input
                             type="number"
                             value={quantity}
@@ -1012,7 +1169,7 @@ export default function Home() {
                           onClick={() => void addSelectedCard()}
                           type="button"
                         >
-                          Añadir a Colección
+                          {dict.card.add}
                         </button>
                       </div>
                     </>
@@ -1024,12 +1181,14 @@ export default function Home() {
         </div>
       )}
 
-      {modal === 'login' && (
+      {(modal === 'login' || modal === 'register') && (
         <LoginModal
+          mode={modal}
           error={loginError}
           pending={loginPending}
           onClose={() => setModal(null)}
-          onSubmit={handleLogin}
+          onSubmit={modal === 'register' ? handleRegister : handleLogin}
+          onSwitchMode={openAuth}
         />
       )}
 

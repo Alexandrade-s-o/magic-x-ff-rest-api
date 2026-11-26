@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import fs from 'fs';
 import path from 'path';
 
@@ -10,7 +11,7 @@ async function download(url: string, dest: string) {
 }
 
 async function main() {
-  const imgDir = path.join(__dirname, '..', 'public', 'img');
+  const imgDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'img');
   if (!fs.existsSync(imgDir)) fs.mkdirSync(imgDir, { recursive: true });
 
   await download(

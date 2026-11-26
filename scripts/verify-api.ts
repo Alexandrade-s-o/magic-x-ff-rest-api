@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { AppModule } from '../src/app.module';
+import { AppModule } from '../src/app.module.js';
 
 async function verify() {
   console.log('🚀 Iniciando servidor de verificación...');

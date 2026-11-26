@@ -11,12 +11,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
-import { CardsService } from './cards.service';
-import { CreateCardDto } from './dto/create-card.dto';
-import { UpdateCardDto } from './dto/update-card.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
+import { CardsService } from './cards.service.js';
+import { CreateCardDto } from './dto/create-card.dto.js';
+import { UpdateCardDto } from './dto/update-card.dto.js';
 
 @Controller('cards')
 export class CardsController {

@@ -5,6 +5,7 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "type": "module",
   "scripts": {
     "build": "nest build",
     "postinstall": "prisma generate",
@@ -15,14 +16,14 @@
     "start:prod": "node dist/main",
     "db:deploy": "prisma migrate deploy",
     "studio": "node -r dotenv/config ./node_modules/prisma/build/index.js studio --schema=prisma/schema.prisma",
-    "import:cards": "ts-node --project tsconfig.json scripts/import-cards.ts",
-    "import:hobbit": "ts-node --project tsconfig.json scripts/import-hobbit.ts",
-    "import:reality-fracture": "ts-node --project tsconfig.json scripts/import-reality-fracture.ts",
-    "seed:users": "ts-node --project tsconfig.json scripts/seed-users.ts",
+    "import:cards": "tsx scripts/import-cards.ts",
+    "import:hobbit": "tsx scripts/import-hobbit.ts",
+    "import:reality-fracture": "tsx scripts/import-reality-fracture.ts",
+    "seed:users": "tsx scripts/seed-users.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch",
+    "test:cov": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json"
   },
@@ -41,6 +42,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
     "express-validator": "^7.3.2",
+    "groq-sdk": "^1.6.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "passport": "^0.7.0",
@@ -74,6 +76,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
@@ -86,13 +89,24 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "useESM": true
+        }
+      ]
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
+    "extensionsToTreatAsEsm": [
+      ".ts"
+    ]
   },
   "engines": {
     "node": "22.x"
