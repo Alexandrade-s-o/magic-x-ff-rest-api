@@ -1,4 +1,15 @@
-type ApiError = { message?: string | string[] };
+type ApiErrorBody = { message?: string | string[] };
+
+/** Error de la API con su código HTTP, para mostrar un mensaje traducido. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 export async function request<T>(
   path: string,
@@ -29,11 +40,14 @@ export async function request<T>(
   }
 
   if (!response.ok) {
-    const apiError = payload as ApiError | null;
+    const apiError = payload as ApiErrorBody | null;
     const message = Array.isArray(apiError?.message)
       ? apiError.message.join(', ')
       : apiError?.message;
-    throw new Error(message || `La solicitud falló (${response.status})`);
+    throw new ApiError(
+      message || `Request failed (${response.status})`,
+      response.status,
+    );
   }
 
   return payload as T;

@@ -1,5 +1,6 @@
 'use client';
 
+import { useI18n } from '@/features/i18n/I18nProvider';
 import type { SpeechController, SpeechSegment } from './useSpeech';
 
 type SpeakButtonProps = {
@@ -10,12 +11,8 @@ type SpeakButtonProps = {
 };
 
 /** Botón «Escuchar / Detener». No se muestra si el navegador no tiene voz. */
-export function SpeakButton({
-  id,
-  segments,
-  speech,
-  label = 'Escuchar',
-}: SpeakButtonProps) {
+export function SpeakButton({ id, segments, speech, label }: SpeakButtonProps) {
+  const { dict } = useI18n();
   if (!speech.supported) return null;
   const active = speech.speakingId === id;
 
@@ -36,7 +33,7 @@ export function SpeakButton({
           />
         )}
       </svg>
-      {active ? 'Detener' : label}
+      {active ? dict.speech.stop : (label ?? dict.speech.listen)}
     </button>
   );
 }

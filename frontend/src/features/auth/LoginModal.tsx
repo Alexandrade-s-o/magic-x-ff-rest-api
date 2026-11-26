@@ -1,4 +1,7 @@
+'use client';
+
 import type { FormEventHandler } from 'react';
+import { useI18n } from '@/features/i18n/I18nProvider';
 
 export type AuthMode = 'login' | 'register';
 
@@ -19,6 +22,8 @@ export function LoginModal({
   onSubmit,
   onSwitchMode,
 }: LoginModalProps) {
+  const { dict } = useI18n();
+  const t = dict.auth;
   const isRegister = mode === 'register';
 
   return (
@@ -32,24 +37,20 @@ export function LoginModal({
         <button
           className="close-btn"
           onClick={onClose}
-          aria-label="Cerrar"
+          aria-label={t.close}
           type="button"
         >
           ×
         </button>
         <div className="modal-heading">
-          <h2>{isRegister ? 'Crear cuenta' : 'Iniciar Sesión'}</h2>
-          <p>
-            {isRegister
-              ? 'Regístrate para guardar tu propia colección de cartas'
-              : 'Accede para administrar tu inventario de cartas'}
-          </p>
+          <h2>{isRegister ? t.registerTitle : t.loginTitle}</h2>
+          <p>{isRegister ? t.registerSubtitle : t.loginSubtitle}</p>
         </div>
         {/* key: al cambiar de modo se monta un formulario limpio */}
         <form onSubmit={onSubmit} key={mode}>
           <div className="form-group">
             <label className="form-label" htmlFor="login-username">
-              Usuario
+              {t.username}
             </label>
             <input
               className="search-input form-input"
@@ -61,20 +62,19 @@ export function LoginModal({
                 minLength: 3,
                 maxLength: 30,
                 pattern: '[A-Za-z0-9_.\\-]{3,30}',
-                title:
-                  'Entre 3 y 30 caracteres: letras, números, punto, guion o guion bajo',
+                title: t.usernameHint,
                 'aria-describedby': 'register-username-hint',
               })}
             />
             {isRegister && (
               <p className="form-hint" id="register-username-hint">
-                3 a 30 caracteres: letras, números, punto, guion o guion bajo.
+                {t.usernameHint}
               </p>
             )}
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="login-password">
-              Contraseña
+              {t.password}
             </label>
             <input
               className="search-input form-input"
@@ -89,7 +89,7 @@ export function LoginModal({
           {isRegister && (
             <div className="form-group">
               <label className="form-label" htmlFor="register-confirm">
-                Confirmar contraseña
+                {t.confirmPassword}
               </label>
               <input
                 className="search-input form-input"
@@ -115,21 +115,21 @@ export function LoginModal({
           >
             {isRegister
               ? pending
-                ? 'Creando cuenta...'
-                : 'Crear cuenta'
+                ? t.submitRegisterPending
+                : t.submitRegister
               : pending
-                ? 'Ingresando...'
-                : 'Ingresar'}
+                ? t.submitLoginPending
+                : t.submitLogin}
           </button>
         </form>
         <p className="auth-switch">
-          {isRegister ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}{' '}
+          {isRegister ? t.haveAccount : t.noAccount}{' '}
           <button
             className="link-button"
             type="button"
             onClick={() => onSwitchMode(isRegister ? 'login' : 'register')}
           >
-            {isRegister ? 'Inicia sesión' : 'Regístrate'}
+            {isRegister ? t.loginLink : t.registerLink}
           </button>
         </p>
       </div>

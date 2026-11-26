@@ -4,6 +4,8 @@ import type { CSSProperties } from 'react';
 import Image from 'next/image';
 import type { RowComponentProps } from 'react-window';
 import type { Card } from '@/types/magic';
+import { useI18n } from '@/features/i18n/I18nProvider';
+import { rarityLabel } from '@/features/i18n/labels';
 
 const fallbackImage = '/img/MTG.png';
 
@@ -30,6 +32,7 @@ export const CardRow = ({
   onCardSelect,
   ariaAttributes,
 }: RowComponentProps<CardRowProps>) => {
+  const { dict } = useI18n();
   const start = index * columns;
   const slice = cards.slice(start, start + columns);
 
@@ -76,7 +79,7 @@ export const CardRow = ({
               <span
                 className={`badge badge-rarity-${card.rarity.name.toLowerCase()}`}
               >
-                {card.rarity.name}
+                {rarityLabel(card.rarity.name, dict)}
               </span>
               <span className="badge">{card.cardType.name}</span>
             </span>

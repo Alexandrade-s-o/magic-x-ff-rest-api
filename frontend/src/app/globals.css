@@ -1256,10 +1256,7 @@ button.card-item {
 }
 .skeleton-grid {
   display: grid;
-  grid-template-columns: repeat(
-    auto-fill,
-    minmax(210px, 1fr)
-  );
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 16px;
   padding: 16px 0;
 }
@@ -1513,4 +1510,50 @@ button.card-item {
   margin: 12px 0;
   border: 0;
   border-top: 1px solid var(--border);
+}
+
+/* --- Selector de idioma --- */
+.lang-switch {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.lang-option {
+  min-width: 34px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+.lang-option:hover {
+  color: var(--text-main);
+}
+.lang-option.active {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+/* --- Móvil: cabecera en dos filas y pestañas desplazables --- */
+@media (max-width: 640px) {
+  .header-inner {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    margin-left: auto;
+  }
+  .tabs-nav {
+    overflow-x: auto;
+  }
+  .tab-btn {
+    flex: 0 0 auto;
+    min-width: auto;
+  }
 }

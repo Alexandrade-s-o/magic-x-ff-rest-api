@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { request } from '@/lib/api';
 import { SpeakButton } from '@/features/a11y/SpeakButton';
 import { useSpeech } from '@/features/a11y/useSpeech';
+import { useI18n } from '@/features/i18n/I18nProvider';
+import { errorText } from '@/features/i18n/errors';
+import { format, type Dictionary } from '@/i18n';
 import { Markdown } from './Markdown';
 
 type ChatMessage = {
@@ -23,26 +26,19 @@ type AdvisorPanelProps = {
   onRegister: () => void;
 };
 
-const SUGGESTIONS = [
-  'Arma un mazo agresivo rojo con cartas de Final Fantasy',
-  '¿Qué cartas de mi colección combinan mejor entre sí?',
-  'Explícame cómo armar una buena curva de maná para 60 cartas',
-];
-
-const TOOL_LABELS: Record<string, string> = {
-  search_cards: 'buscó cartas',
-  get_card: 'revisó cartas',
-  get_my_collection: 'revisó tu colección',
-};
-
 /** Resume las consultas del asesor: «buscó cartas (2), revisó tu colección». */
-function describeTools(toolCalls: string[]): string {
+function describeTools(toolCalls: string[], dict: Dictionary): string {
+  const labels: Record<string, string> = {
+    search_cards: dict.advisor.toolSearch,
+    get_card: dict.advisor.toolCard,
+    get_my_collection: dict.advisor.toolCollection,
+  };
   const counts = new Map<string, number>();
   for (const name of toolCalls) counts.set(name, (counts.get(name) ?? 0) + 1);
   return [...counts]
     .map(
       ([name, count]) =>
-        `${TOOL_LABELS[name] ?? name}${count > 1 ? ` (${count})` : ''}`,
+        `${labels[name] ?? name}${count > 1 ? ` (${count})` : ''}`,
     )
     .join(', ');
 }
@@ -57,19 +53,14 @@ function loadMessages(storageKey: string | null): ChatMessage[] {
   }
 }
 
-function friendlyError(error: unknown): string {
-  const message = error instanceof Error ? error.message : '';
-  if (message === 'Unauthorized')
-    return 'Tu sesión expiró. Vuelve a iniciar sesión para usar el asesor.';
-  return message || 'No se pudo consultar al asesor. Intenta de nuevo.';
-}
-
 export function AdvisorPanel({
   token,
   username,
   onLogin,
   onRegister,
 }: AdvisorPanelProps) {
+  const { lang, dict } = useI18n();
+  const t = dict.advisor;
   const storageKey = username ? `advisor_chat_${username}` : null;
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     loadMessages(storageKey),
@@ -116,7 +107,7 @@ export function AdvisorPanel({
         {
           method: 'POST',
           body: JSON.stringify({
-            language: 'es',
+            language: lang,
             messages: history
               .slice(-20)
               .map(({ role, content: body }) => ({ role, content: body })),
@@ -139,7 +130,7 @@ export function AdvisorPanel({
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: friendlyError(error),
+          content: errorText(error, dict, { 401: t.sessionExpired }),
           error: true,
         },
       ]);
@@ -158,12 +149,9 @@ export function AdvisorPanel({
       <div className="advisor-header">
         <div>
           <h2 className="section-title" id="advisor-title">
-            Asesor de mazos IA
+            {t.title}
           </h2>
-          <p className="section-subtitle">
-            Pregunta cómo armar un mazo o qué estrategia usar. Recomienda solo
-            cartas reales del catálogo y puede revisar tu colección.
-          </p>
+          <p className="section-subtitle">{t.subtitle}</p>
         </div>
         {token && messages.length > 0 && (
           <button
@@ -171,31 +159,29 @@ export function AdvisorPanel({
             onClick={newConversation}
             type="button"
           >
-            Nueva conversación
+            {t.newConversation}
           </button>
         )}
       </div>
 
       {!token ? (
         <div className="collection-auth-warning">
-          <h3>Inicia sesión o crea una cuenta para usar el asesor</h3>
-          <p>
-            El asesor usa tu colección para recomendarte cartas y estrategias.
-          </p>
+          <h3>{t.authTitle}</h3>
+          <p>{t.authText}</p>
           <div className="auth-warning-actions">
             <button
               className="btn btn-primary btn-sm"
               onClick={onLogin}
               type="button"
             >
-              Iniciar Sesión
+              {t.login}
             </button>
             <button
               className="btn btn-outline btn-sm"
               onClick={onRegister}
               type="button"
             >
-              Crear cuenta
+              {t.register}
             </button>
           </div>
         </div>
@@ -206,13 +192,13 @@ export function AdvisorPanel({
             ref={logRef}
             role="log"
             aria-live="polite"
-            aria-label="Conversación con el asesor"
+            aria-label={t.logLabel}
           >
             {messages.length === 0 && (
               <div className="advisor-empty">
-                <p>Prueba con una de estas preguntas:</p>
+                <p>{t.tryThese}</p>
                 <div className="advisor-suggestions">
-                  {SUGGESTIONS.map((suggestion) => (
+                  {t.suggestions.map((suggestion) => (
                     <button
                       className="advisor-chip"
                       key={suggestion}
@@ -232,7 +218,7 @@ export function AdvisorPanel({
                 key={message.id}
               >
                 <span className="advisor-role">
-                  {message.role === 'user' ? 'Tú' : 'Asesor'}
+                  {message.role === 'user' ? t.you : t.assistant}
                 </span>
                 {message.role === 'assistant' && !message.error ? (
                   <Markdown text={message.content} />
@@ -243,12 +229,14 @@ export function AdvisorPanel({
                   <div className="advisor-msg-footer">
                     {message.toolCalls && message.toolCalls.length > 0 && (
                       <span className="advisor-tools">
-                        Consultó la base: {describeTools(message.toolCalls)}
+                        {format(t.consulted, {
+                          tools: describeTools(message.toolCalls, dict),
+                        })}
                       </span>
                     )}
                     <SpeakButton
                       id={message.id}
-                      segments={[{ text: message.content, lang: 'es' }]}
+                      segments={[{ text: message.content, lang }]}
                       speech={speech}
                     />
                   </div>
@@ -258,8 +246,8 @@ export function AdvisorPanel({
 
             {pending && (
               <div className="advisor-msg assistant pending" aria-busy="true">
-                <span className="advisor-role">Asesor</span>
-                <p>Consultando el catálogo…</p>
+                <span className="advisor-role">{t.assistant}</span>
+                <p>{t.thinking}</p>
               </div>
             )}
           </div>
@@ -272,7 +260,7 @@ export function AdvisorPanel({
             }}
           >
             <label className="sr-only" htmlFor="advisor-input">
-              Escribe tu pregunta para el asesor
+              {t.inputLabel}
             </label>
             <textarea
               className="search-input form-input advisor-input"
@@ -281,7 +269,7 @@ export function AdvisorPanel({
               maxLength={2000}
               value={input}
               disabled={pending}
-              placeholder="Ej.: arma un mazo verde de 60 cartas con criaturas grandes"
+              placeholder={t.placeholder}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey) {
@@ -295,13 +283,10 @@ export function AdvisorPanel({
               disabled={pending || !input.trim()}
               type="submit"
             >
-              {pending ? 'Pensando…' : 'Enviar'}
+              {pending ? t.sending : t.send}
             </button>
           </form>
-          <p className="advisor-note">
-            Las respuestas las genera una IA (Groq) y pueden tener errores. Para
-            responder, tus mensajes y tu colección se envían a Groq.
-          </p>
+          <p className="advisor-note">{t.note}</p>
         </>
       )}
     </section>
